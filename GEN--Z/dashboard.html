@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Dashboard</title>
+  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+</head>
+<body>
+  <nav class="navbar navbar-light bg-light">
+    <span class="navbar-brand">GEN-Z</span>
+    <div>
+      <span id="nav-username"></span>
+      <button id="logoutBtn" class="btn btn-sm btn-outline-secondary"><Logout</button>
+    </div>
+  </nav>
+
+  <main class="container mt-4">
+    <h2>Welcome, <span id="userName">User</span></h2>
+
+    <h4 class="mt-4">Purchase History</h4>
+    <div id="purchases">
+      <p>Loading purchases...</p>
+    </div>
+  </main>
+
+  <script>
+    // run on page load
+    (async function loadDashboard(){
+      const token = localStorage.getItem("token");
+      if (!token) {
+        window.location.href = "/login.html";
+        return;
+      }
+
+      // optional: show stored username from login
+      const storedName = localStorage.getItem("username");
+      if (storedName) {
+        document.getElementById("nav-username").innerText = storedName;
+        document.getElementById("userName").innerText = storedName;
+      }
+
+      try {
+        const res = await fetch("https://practice-production-bc43.up.railway.app/api/v1/user/profile", {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+          }
+        });
+
+        if (!res.ok) {
+          if (res.status === 401) {
+            localStorage.removeItem("token");
+            alert("Session expired. Please login again.");
+            window.location.href = "/login.html";
+            return;
+          }
+          const err = await res.json().catch(()=>({}));
+          document.getElementById("purchases").innerText = err.message || "Could not load purchases.";
+          return;
+        }
+
+        const data = await res.json();
+        // assume backend returns { username, purchaseHistory: [ {itemName, price, date}, ... ] }
+        if (data.username) {
+          document.getElementById("userName").innerText = data.username;
+          document.getElementById("nav-username").innerText = data.username;
+        }
+
+        const list = data.purchaseHistory || [];
+        if (list.length === 0) {
+          document.getElementById("purchases").innerHTML = "<p>You have no purchases yet.</p>";
+        } else {
+          const ul = document.createElement("ul");
+          ul.className = "list-group";
+          list.forEach(p => {
+            const li = document.createElement("li");
+            li.className = "list-group-item";
+            li.innerHTML = `<strong>${escapeHtml(p.itemName)}</strong>
+                            <div>${p.date} • ${p.price ? "Rs " + p.price : ""}</div>`;
+            ul.appendChild(li);
+          });
+          const container = document.getElementById("purchases");
+          container.innerHTML = "";
+          container.appendChild(ul);
+        }
+
+      } catch (err) {
+        console.error(err);
+        document.getElementById("purchases").innerText = "Network error. Try again later.";
+      }
+
+      document.getElementById("logoutBtn").addEventListener("click", () => {
+        localStorage.removeItem("token");
+        localStorage.removeItem("username");
+        window.location.href = "/login.html";
+      });
+
+      // small helper to avoid XSS
+      function escapeHtml(text) {
+        if (!text) return "";
+        return text.replace(/[&<>"']/g, function(m){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]; });
+      }
+    })();
+  </script>
+</body>
+</html>
